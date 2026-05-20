@@ -1,0 +1,259 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>TRAC — Automotive Engineering Suite</title>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.min.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/pdf-lib/1.17.1/pdf-lib.min.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/Tesseract.js/4.1.1/tesseract.min.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js"></script>
+<link rel="stylesheet" href="style.css">
+</head>
+<body>
+<div class="orb o1"></div><div class="orb o2"></div>
+<header>
+  <div class="logo"><div class="logo-dot"></div><div><div>TRAC</div><div class="logo-sub">Automotive Suite</div></div></div>
+  <div class="tbg"><span class="tbl">Drawing</span>
+    <button class="tb" onclick="document.getElementById('drawingInput').click()"><svg viewBox="0 0 16 16"><path d="M8 1v10M4 7l4 4 4-4M2 13h12"/></svg>Load</button>
+    <button class="tb blue" onclick="document.getElementById('compareInput').click()"><svg viewBox="0 0 16 16"><rect x="2" y="2" width="5" height="12" rx="1"/><rect x="9" y="2" width="5" height="12" rx="1"/></svg>Compare</button>
+  </div>
+  <div class="tbg"><span class="tbl">Annotate</span>
+    <button class="tb" id="btnBalloon" onclick="setMode('balloon')"><svg viewBox="0 0 16 16"><circle cx="7" cy="6" r="4"/><path d="M11 10l3 4"/></svg>Balloon</button>
+    <button class="tb active" id="btnSelect" onclick="setMode('select')"><svg viewBox="0 0 16 16"><path d="M3 2l4 12 2-5 5-2z"/></svg>Select</button>
+    <button class="tb orange" id="btnShape" onclick="setMode('shape')"><svg viewBox="0 0 16 16"><rect x="2" y="2" width="12" height="12" rx="1"/></svg>Shape</button>
+  </div>
+  <div class="tbg"><span class="tbl">Edit</span>
+    <button class="tb" id="btnUndo" onclick="undo()" disabled><svg viewBox="0 0 16 16"><path d="M3 6H9a4 4 0 0 1 0 8H5M3 6L1 4M3 6l2-2"/></svg></button>
+    <button class="tb" id="btnRedo" onclick="redo()" disabled><svg viewBox="0 0 16 16"><path d="M13 6H7a4 4 0 0 0 0 8h4M13 6l2-2M13 6l-2-2"/></svg></button>
+    <button class="tb red" onclick="clearAll()"><svg viewBox="0 0 16 16"><path d="M3 3l10 10M13 3L3 13"/></svg>Clear</button>
+  </div>
+  <div class="tbg"><span class="tbl">Export</span>
+    <button class="tb grn" id="btnPDF" onclick="exportAnnotatedPDF()" disabled><svg viewBox="0 0 16 16"><path d="M4 1h6l4 4v10H2V1zM10 1v4h4"/></svg>PDF</button>
+    <button class="tb grn" id="btnXLSX" onclick="exportPPAP()" disabled><svg viewBox="0 0 16 16"><path d="M2 2h12v12H2zM2 6h12M6 2v12"/></svg>PPAP</button>
+    <button class="tb orange" id="btnPCDMIS" onclick="exportPCDMIS()" disabled><svg viewBox="0 0 16 16"><circle cx="8" cy="8" r="3"/><path d="M8 1v2M8 13v2M1 8h2M13 8h2"/></svg>PC-DMIS</button>
+  </div>
+  <div class="tbg"><span class="tbl">OCR</span>
+    <button class="tb blue" id="btnOCR" onclick="runOCR()" disabled><svg viewBox="0 0 16 16"><rect x="1" y="1" width="14" height="14" rx="1"/><path d="M4 6h8M4 10h5"/></svg>Extract Dims</button>
+  </div>
+  <div class="mode-pill select" id="modePill"><div class="mode-dot"></div><span id="modeInd">SELECT</span></div>
+</header>
+<div class="prog" id="prog"><div class="prog-fill" id="progFill"></div></div>
+<div class="main">
+  <div class="canvas-area" id="canvasArea">
+    <div style="position:relative;min-width:100%;min-height:100%">
+      <div class="drop-zone" id="dropZone">
+        <div class="dz-card">
+          <div class="dz-icon"><svg viewBox="0 0 24 24"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><polyline points="14 2 14 8 20 8"/><line x1="12" y1="18" x2="12" y2="12"/><line x1="9" y1="15" x2="15" y2="15"/></svg></div>
+          <h2>Load Engineering Drawing</h2>
+          <p>Upload a CAD / engineering PDF to begin balloon callout and inspection workflow</p>
+          <button class="dz-btn" onclick="document.getElementById('drawingInput').click()">Browse PDF…</button>
+          <div style="display:flex;flex-direction:column;gap:3px;margin-top:4px">
+            <div style="font-size:10px;color:var(--tdim);display:flex;gap:6px;align-items:center"><span class="kbd">P</span> Balloon mode</div>
+            <div style="font-size:10px;color:var(--tdim);display:flex;gap:6px;align-items:center"><span class="kbd">S</span> Select mode &nbsp;<span class="kbd">Del</span> Delete</div>
+          </div>
+        </div>
+      </div>
+      <div class="canvas-wrapper" id="canvasWrapper" style="display:none">
+        <canvas id="drawingCanvas"></canvas>
+        <canvas id="compareCanvas"></canvas>
+        <canvas id="annotationCanvas"></canvas>
+      </div>
+    </div>
+    <div class="compare-bar" id="cmpBar">
+      <span style="font-size:10px;font-family:var(--fm)">A</span>
+      <input type="range" id="cmpSlider" min="0" max="1" step=".05" value=".5" oninput="setCmpOpacity(this.value)">
+      <span style="font-size:10px;font-family:var(--fm)">B</span>
+      <button style="height:22px;padding:0 10px;border-radius:10px;font-size:10px;border:1px solid rgba(240,80,200,.3);background:rgba(240,80,200,.1);color:var(--accent4);cursor:pointer" onclick="closeCompare()">✕ Close</button>
+    </div>
+    <div class="zoom-ctl">
+      <button class="zb" onclick="zoom(-.25)">−</button>
+      <span class="zlbl" id="zoomLbl">100%</span>
+      <button class="zb" onclick="zoom(.25)">+</button>
+      <button class="zb" onclick="zoomFit()" title="Fit">⊡</button>
+    </div>
+  </div>
+  <div class="side-panel" id="sidePanel">
+    <div class="resize-handle" id="resizeHandle"></div>
+    <div class="style-strip">
+      <div style="display:flex;align-items:center;gap:6px"><span class="sgl">Color</span>
+        <div class="color-wrap" id="colorWrap" style="background:#c8f050"><input type="color" id="balloonColor" value="#c8f050" oninput="updateStyle()"></div>
+      </div>
+      <div style="display:flex;align-items:center;gap:6px"><span class="sgl">Size</span>
+        <input class="num-input" type="number" id="balloonSize" value="12" min="6" max="36" oninput="updateStyle()">
+      </div>
+      <span class="strip-badge" id="stripBadge">NEW</span>
+    </div>
+    <div class="ptabs">
+      <div class="ptab active" onclick="swTab('balloons')" id="tab-balloons"><svg width="11" height="11" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"><circle cx="7" cy="6" r="4"/><path d="M11 10l3 4"/></svg>Balloons<span class="tab-badge" id="bCount" style="display:none">0</span></div>
+      <div class="ptab" onclick="swTab('ppap')" id="tab-ppap"><svg width="11" height="11" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"><path d="M2 2h12v12H2zM2 6h12M6 2v12"/></svg>PPAP<span class="tab-badge" id="pCount" style="display:none">0</span></div>
+      <div class="ptab" onclick="swTab('ocr')" id="tab-ocr"><svg width="11" height="11" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"><rect x="1" y="1" width="14" height="14" rx="1"/><path d="M4 6h8M4 10h5"/></svg>OCR</div>
+      <div class="ptab" onclick="swTab('points')" id="tab-points"><svg width="11" height="11" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"><circle cx="8" cy="8" r="2"/><path d="M8 2v2M8 12v2M2 8h2M12 8h2"/></svg>Points</div>
+      <div class="ptab" onclick="swTab('pcdmis')" id="tab-pcdmis"><svg width="11" height="11" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"><path d="M3 4l3 4-3 4M9 12h4"/></svg>PC-DMIS</div>
+      <div class="ptab" onclick="swTab('shapes')" id="tab-shapes"><svg width="11" height="11" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"><rect x="2" y="2" width="12" height="12" rx="1"/></svg>Shapes</div>
+    </div>
+    <div class="pbody">
+      <!-- BALLOONS -->
+      <div class="psec active" id="sec-balloons">
+        <div class="rnbar" id="rnbar"><span>Free balloons — auto-renumber?</span><button class="abtn g" style="height:26px;font-size:10px;padding:0 9px" onclick="renumberAll()">Renumber</button></div>
+        <div class="blist" id="blist"><div class="empty-st"><div class="ei">◎</div>No balloons yet.<br>Switch to <b>Balloon</b> mode and click the drawing.</div></div>
+        <div style="display:flex;flex-wrap:wrap;gap:5px;padding:8px 0 4px;border-top:1px solid var(--glb);margin-top:8px">
+          <span style="font-size:10px;color:var(--tdim);display:flex;align-items:center;gap:4px"><span class="kbd">P</span>Balloon</span>
+          <span style="font-size:10px;color:var(--tdim);display:flex;align-items:center;gap:4px"><span class="kbd">S</span>Select</span>
+          <span style="font-size:10px;color:var(--tdim);display:flex;align-items:center;gap:4px"><span class="kbd">Del</span>Delete</span>
+          <span style="font-size:10px;color:var(--tdim);display:flex;align-items:center;gap:4px"><span class="kbd">Ctrl+Z</span>Undo</span>
+        </div>
+      </div>
+      <!-- PPAP -->
+      <div class="psec" id="sec-ppap">
+        <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:8px">
+          <div><div style="font-size:12px;font-weight:600">AIAG / PPAP Characteristic Log</div><div style="font-size:10px;color:var(--tdim);margin-top:2px">Link balloons via ⊞ button in Balloons tab</div></div>
+          <button class="abtn b" style="height:26px;font-size:10px" onclick="document.getElementById('ppapImp').click()"><svg width="11" height="11" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M8 1v10M4 7l4 4 4-4M2 13h12"/></svg>Import</button>
+        </div>
+        <div class="ppap-wrap">
+          <table class="ppap-t">
+            <thead><tr><th>#</th><th>Description</th><th>Type</th><th>Nom</th><th>+Tol</th><th>−Tol</th><th>Gauge</th><th>Freq</th><th>Result</th><th></th></tr></thead>
+            <tbody id="ppapBody"></tbody>
+          </table>
+        </div>
+        <div id="ppapHint" class="empty-st" style="padding:16px"><div class="ei">📐</div>No characteristics yet.<br>Add manually or link balloons.</div>
+        <button class="add-btn" onclick="addPPAPRow()">+ Add Characteristic</button>
+      </div>
+      <!-- OCR -->
+      <div class="psec" id="sec-ocr">
+        <div style="font-size:12px;font-weight:600;margin-bottom:4px">OCR Dimension Extractor</div>
+        <div style="font-size:10px;color:var(--tdim);margin-bottom:8px;line-height:1.65">Runs Tesseract OCR on the drawing canvas and auto-detects dimensions, tolerances, GD&amp;T callouts, thread specs. Click any result to add to the PPAP table.</div>
+        <button class="abtn b" id="ocrBtn" onclick="runOCR()" style="width:100%;justify-content:center;margin-bottom:8px" disabled><svg width="12" height="12" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><rect x="1" y="1" width="14" height="14" rx="1"/><path d="M4 6h8M4 10h5"/></svg>Run OCR on Drawing</button>
+        <div class="ocr-st" id="ocrSt"></div>
+        <div class="dim-list" id="dimList"><div class="empty-st"><div class="ei">🔍</div>Load a drawing and run OCR.</div></div>
+      </div>
+      <!-- POINTS -->
+      <div class="psec" id="sec-points">
+        <div style="font-size:12px;font-weight:600;margin-bottom:4px">CMM Point Coordinate Table</div>
+        <div style="font-size:10px;color:var(--tdim);margin-bottom:8px;line-height:1.65">Enter measurement points from the drawing coordinate table. Export directly as a PC-DMIS program or include in the main .PRG export.</div>
+        <div class="pt-wrap">
+          <table class="pt-t">
+            <thead><tr><th>ID</th><th>Label</th><th>X</th><th>Y</th><th>Z</th><th>I</th><th>J</th><th>K</th><th>±Tol</th><th></th></tr></thead>
+            <tbody id="ptBody"></tbody>
+          </table>
+        </div>
+        <div id="ptHint" class="empty-st" style="padding:14px"><div class="ei">📍</div>No points yet.</div>
+        <button class="add-btn" onclick="addPoint()">+ Add Point</button>
+        <div style="display:flex;gap:6px;margin-top:8px;flex-wrap:wrap">
+          <button class="abtn b" onclick="exportPointsPRG()"><svg width="11" height="11" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M3 4l3 4-3 4M9 12h4"/></svg>Export PC-DMIS Points</button>
+          <button class="abtn" onclick="clearPoints()">Clear</button>
+        </div>
+      </div>
+      <!-- PC-DMIS -->
+      <div class="psec" id="sec-pcdmis">
+        <div class="sec-title">Part Header</div>
+        <div class="pcdmis-grid">
+          <div><label class="f-label">Part Number</label><input class="f-inp" id="pc-pn" placeholder="ABC-12345" oninput="updatePCPreview()"></div>
+          <div><label class="f-label">Revision</label><input class="f-inp" id="pc-rev" value="A" oninput="updatePCPreview()"></div>
+          <div><label class="f-label">Operator</label><input class="f-inp" id="pc-op" placeholder="Name" oninput="updatePCPreview()"></div>
+          <div><label class="f-label">CMM Machine</label><input class="f-inp" id="pc-mach" placeholder="DEA Delta" oninput="updatePCPreview()"></div>
+        </div>
+        <div class="sec-title">Program Settings</div>
+        <div class="f-row"><span class="f-label" style="min-width:52px;color:var(--tdim);font-size:10px">Mode</span>
+          <div class="mode-tog" style="flex:1">
+            <div class="mopt on" id="pcMAN" onclick="setPCMode('MAN')">MAN</div>
+            <div class="mopt" id="pcDCC" onclick="setPCMode('DCC')">DCC</div>
+          </div>
+        </div>
+        <div class="f-row"><span class="f-label" style="min-width:52px;color:var(--tdim);font-size:10px">Units</span>
+          <div class="mode-tog" style="flex:1">
+            <div class="mopt on" id="pcMM" onclick="setPCUnits('MM')">MM</div>
+            <div class="mopt" id="pcIN" onclick="setPCUnits('INCH')">INCH</div>
+          </div>
+        </div>
+        <div class="pcdmis-grid">
+          <div><label class="f-label">Clearance X</label><input class="f-inp" id="pc-cx" type="number" value="100" oninput="updatePCPreview()"></div>
+          <div><label class="f-label">Clearance Y</label><input class="f-inp" id="pc-cy" type="number" value="100" oninput="updatePCPreview()"></div>
+          <div><label class="f-label">Clearance Z</label><input class="f-inp" id="pc-cz" type="number" value="100" oninput="updatePCPreview()"></div>
+          <div><label class="f-label">Probe Dia (mm)</label><input class="f-inp" id="pc-probe" type="number" value="1.0" step=".5" oninput="updatePCPreview()"></div>
+        </div>
+        <div class="sec-title">Program Preview</div>
+        <div class="preview-box" id="pcPreview">$$ Add balloons + PPAP rows to see preview…</div>
+        <div style="display:flex;gap:6px;margin-top:10px;flex-wrap:wrap">
+          <button class="abtn g" onclick="exportPCDMIS()"><svg width="11" height="11" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M8 1v10M4 7l4 4 4-4M2 13h12"/></svg>Export .PRG</button>
+          <button class="abtn b" onclick="copyPC()"><svg width="11" height="11" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><rect x="5" y="5" width="9" height="9" rx="1"/><path d="M10 5V3a1 1 0 0 0-1-1H3a1 1 0 0 0-1 1v6a1 1 0 0 0 1 1h2"/></svg>Copy</button>
+        </div>
+      </div>
+      <!-- SHAPES -->
+      <div class="psec" id="sec-shapes">
+        <div class="sec-title">Draw Shape</div>
+        <div class="sh-grid">
+          <button class="sh-pick" data-shape="rect" onclick="pickShape('rect')"><svg viewBox="0 0 16 16"><rect x="2" y="3" width="12" height="10" rx="1"/></svg>Rect</button>
+          <button class="sh-pick" data-shape="circle" onclick="pickShape('circle')"><svg viewBox="0 0 16 16"><ellipse cx="8" cy="8" rx="6" ry="4"/></svg>Circle</button>
+          <button class="sh-pick" data-shape="line" onclick="pickShape('line')"><svg viewBox="0 0 16 16"><path d="M2 14L14 2"/></svg>Line</button>
+          <button class="sh-pick" data-shape="arrow" onclick="pickShape('arrow')"><svg viewBox="0 0 16 16"><path d="M2 14L12 4M8 4h4v4"/></svg>Arrow</button>
+          <button class="sh-pick" data-shape="freehand" onclick="pickShape('freehand')"><svg viewBox="0 0 16 16"><path d="M2 12c2-3 3-7 6-7 2 0 2 4 4 4s1-3 2-4"/></svg>Free</button>
+          <button class="sh-pick" data-shape="cloud" onclick="pickShape('cloud')"><svg viewBox="0 0 16 16"><path d="M4 10Q2 10 2 8Q2 5 5 5Q5 2 8 2Q11 2 11 5Q14 5 14 8Q14 10 12 10H4z"/></svg>Cloud</button>
+          <button class="sh-pick" data-shape="revtri" onclick="pickShape('revtri')"><svg viewBox="0 0 16 16"><path d="M8 2l7 12H1z"/></svg>Rev△</button>
+          <button class="sh-pick" data-shape="datum" onclick="pickShape('datum')"><svg viewBox="0 0 16 16"><circle cx="8" cy="8" r="6"/><path d="M2 8h12"/></svg>Datum</button>
+          <button class="sh-pick" data-shape="weld" onclick="pickShape('weld')"><svg viewBox="0 0 16 16"><path d="M2 8h12M5 8L8 4l3 4"/></svg>Weld</button>
+          <button class="sh-pick" data-shape="dim" onclick="pickShape('dim')"><svg viewBox="0 0 16 16"><path d="M3 12l10-8M3 8v4M13 4v4M3 12h10"/></svg>Dim</button>
+          <button class="sh-pick" data-shape="gdt" onclick="pickShape('gdt')"><svg viewBox="0 0 16 16"><rect x="1" y="5" width="14" height="6" rx="1"/><path d="M5 5v6M9 5v6"/></svg>GD&amp;T</button>
+          <button class="sh-pick" data-shape="cpl" onclick="pickShape('cpl')"><svg viewBox="0 0 16 16"><path d="M2 4h12M2 8h12M2 12h12" stroke-dasharray="3,2"/></svg>C-Pln</button>
+        </div>
+        <div class="sh-hint" id="shHint"></div>
+        <div style="display:flex;align-items:center;gap:8px;margin-bottom:8px">
+          <span class="sgl">Stroke</span>
+          <div class="color-wrap" id="shStrokeWrap" style="background:#c8f050"><input type="color" id="shStroke" value="#c8f050" oninput="shStyleCh()"></div>
+          <span class="sgl">Fill</span>
+          <div class="color-wrap" id="shFillWrap" style="background:#c8f050;opacity:.35"><input type="color" id="shFill" value="#c8f050" oninput="shStyleCh()"></div>
+          <label style="display:flex;align-items:center;gap:3px;font-size:11px;color:var(--tdim);cursor:pointer"><input type="checkbox" id="shFillOn" onchange="shStyleCh()">Fill</label>
+          <input class="num-input" type="number" id="shW" value="2" min=".5" max="20" step=".5" oninput="shStyleCh()" style="width:44px">
+          <select id="shDash" class="f-sel" onchange="shStyleCh()" style="font-size:10px;padding:3px 4px"><option value="solid">—</option><option value="dashed">- -</option><option value="dotted">···</option></select>
+        </div>
+        <div style="font-size:9px;font-weight:700;letter-spacing:.1em;text-transform:uppercase;color:var(--tdim);margin-bottom:5px">Placed Shapes</div>
+        <div class="slist" id="slist"><div class="empty-st"><div class="ei">▱</div>No shapes yet.</div></div>
+      </div>
+    </div>
+  </div>
+</div>
+<!-- Link dropdown -->
+<div class="ldd" id="ldd"><div class="ldd-title">Link Balloon → PPAP Row</div><div id="lddOpts"></div></div>
+<!-- Balloon text editor -->
+<div class="te" id="teB">
+  <div class="te-hd"><span class="te-title">Edit Balloon</span><button class="te-x" onclick="closeTE()">×</button></div>
+  <div class="te-body">
+    <div class="te-row"><span class="te-lbl">No.</span><input class="te-num" id="teNum" type="text" placeholder="3 or 3A"><span style="font-size:10px;color:var(--tdim)">in circle</span></div>
+    <div class="te-row"><span class="te-lbl">Label</span><input class="te-inp" id="teLabel" placeholder="Sub-label below number"></div>
+    <div class="te-row"><span class="te-lbl">Size</span><input class="te-num" id="teSize" type="number" min="6" max="48" value="12"><span style="font-size:10px;color:var(--tdim)">px</span>
+      <div class="te-fmt"><button class="te-f" id="teBold" onclick="tfmt('Bold')"><b>B</b></button><button class="te-f" id="teItalic" onclick="tfmt('Italic')"><i>I</i></button><button class="te-f" id="teUnder" onclick="tfmt('Underline')"><u>U</u></button></div>
+    </div>
+    <div class="te-row"><span class="te-lbl">Color</span><div class="te-cw" id="teColorW"><input type="color" id="teColor" value="#c8f050" oninput="document.getElementById('teColorW').style.background=this.value"></div></div>
+  </div>
+  <div class="te-ft"><button class="te-ok" onclick="applyTE()">Apply</button><button class="te-cancel" onclick="closeTE()">Cancel</button></div>
+</div>
+<!-- Inline editor -->
+<div class="ie" id="ie">
+  <div class="ie-row">
+    <span class="ie-lbl">No.</span><input class="ie-inp" id="ieNum" type="text" style="width:42px;text-align:center" onkeydown="if(event.key==='Enter')applyIE();if(event.key==='Escape')closeIE()">
+    <span class="ie-lbl" style="margin-left:6px">Label</span><input class="ie-inp" id="ieLabel" placeholder="Label…" style="flex:1" onkeydown="if(event.key==='Enter')applyIE();if(event.key==='Escape')closeIE()">
+  </div>
+  <div class="ie-acts"><button class="ie-ok" onclick="applyIE()">✓</button><button class="ie-cancel" onclick="closeIE()">✕</button></div>
+</div>
+<!-- Shape text editor -->
+<div class="te" id="teS">
+  <div class="te-hd"><span class="te-title">Shape Label</span><button class="te-x" onclick="closeSTE()">×</button></div>
+  <div class="te-body">
+    <div class="te-row"><span class="te-lbl">Text</span><input class="te-inp" id="stText" placeholder="Label inside / beside shape"></div>
+    <div class="te-row"><span class="te-lbl">Size</span><input class="te-num" id="stSize" type="number" min="6" max="72" value="12"><span style="font-size:10px;color:var(--tdim)">px</span>
+      <div class="te-fmt"><button class="te-f" id="stBold" onclick="stfmt('Bold')"><b>B</b></button><button class="te-f" id="stItalic" onclick="stfmt('Italic')"><i>I</i></button></div>
+    </div>
+    <div class="te-row"><span class="te-lbl">Color</span><div class="te-cw" id="stColorW"><input type="color" id="stColor" value="#111111" oninput="document.getElementById('stColorW').style.background=this.value"></div>
+      <select id="stPos" class="f-sel" style="flex:1;font-size:11px;margin-left:6px"><option value="inside">Inside</option><option value="above">Above</option><option value="below">Below</option><option value="right">Right</option></select>
+    </div>
+  </div>
+  <div class="te-ft"><button class="te-ok" onclick="applySTE()">Apply</button><button class="te-cancel" onclick="closeSTE()">Skip</button></div>
+</div>
+<div class="hint" id="hint"></div>
+<div class="toast" id="toast"></div>
+<input type="file" id="drawingInput" accept=".pdf" onchange="loadDrawing(this)" style="display:none">
+<input type="file" id="compareInput" accept=".pdf" onchange="loadCompare(this)" style="display:none">
+<input type="file" id="ppapImp" accept=".xlsx,.xls" onchange="importPPAP(this)" style="display:none">
+<script src="app.js"></script>
+</body>
+</html>
