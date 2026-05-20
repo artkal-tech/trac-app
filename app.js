@@ -592,9 +592,7 @@ Return ONLY valid JSON array, no other text. Example:
     const data=await resp.json();
     if(data.error){throw new Error(data.error.message);}
     const text=data.content[0].text.trim();
-    const cleaned=text.replace(/^```json
-?/,'').replace(/
-?```$/,'').trim();
+    const cleaned=text.replace(/^```json\n?/,'').replace(/\n?```$/,'').trim();
     const items=JSON.parse(cleaned);
     ocrDims=items.map((item,i)=>({
       id:i+1,
