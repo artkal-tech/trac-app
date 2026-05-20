@@ -35,7 +35,7 @@ async function loadDrawing(inp){
   drawingLoaded=true;
   document.getElementById('dropZone').style.display='none';
   document.getElementById('canvasWrapper').style.display='inline-block';
-  ['btnPDF','btnXLSX','btnPCDMIS','btnOCR','ocrBtn'].forEach(id=>{const el=document.getElementById(id);if(el)el.disabled=false;});
+  ['btnPDF','btnXLSX','btnPCDMIS','btnOCR','ocrBtn','autoBtn','aiScanBtn'].forEach(id=>{const el=document.getElementById(id);if(el)el.disabled=false;});
   hideProg();bindEvents();toast('Loaded: '+f.name,'ok');inp.value='';
 }
 async function renderPDF(bytes,canvasId,setAnnot){
@@ -553,17 +553,108 @@ function importPPAP(inp){
   reader.readAsArrayBuffer(f);inp.value='';
 }
 
-// ── OCR ───────────────────────────────────────────────────────────────────
+// ── AI SCAN ───────────────────────────────────────────────────────────────
+async function runAIScan(){
+  if(!drawingLoaded){toast('Load a drawing first','err');return;}
+  const apiKey=document.getElementById('aiApiKey').value.trim();
+  if(!apiKey){toast('Enter your Claude API key first','err');document.getElementById('aiApiKey').focus();return;}
+  const st=document.getElementById('ocrSt');
+  st.className='ocr-st run';st.textContent='⏳ AI scanning drawing…';
+  const canvas=document.getElementById('drawingCanvas');
+  const imgData=canvas.toDataURL('image/jpeg',0.92).split(',')[1];
+  const cw=canvas.width,ch=canvas.height;
+  try{
+    const resp=await fetch('https://api.anthropic.com/v1/messages',{
+      method:'POST',
+      headers:{'Content-Type':'application/json','x-api-key':apiKey,'anthropic-version':'2023-06-01','anthropic-dangerous-direct-browser-access':'true'},
+      body:JSON.stringify({
+        model:'claude-opus-4-5',
+        max_tokens:2000,
+        messages:[{role:'user',content:[
+          {type:'image',source:{type:'base64',media_type:'image/jpeg',data:imgData}},
+          {type:'text',text:`You are an expert at reading 2D engineering drawings. Analyze this drawing and extract every dimension, tolerance, note and GD&T callout you can find.
+
+For each item return a JSON array. Each element must have:
+- "label": short description of what this dimension/feature is (e.g. "Hole diameter", "Overall length", "Thread spec")
+- "type": one of: length, diameter, radius, angle, position, flatness, roundness, perpendicularity, parallelism, runout, profile, cylindricity, thread, surface, note
+- "nom": nominal value as a number (0 if not applicable)
+- "upperTol": upper tolerance as positive number (null if none)
+- "lowerTol": lower tolerance as negative number (null if none)  
+- "raw": the exact text as it appears on the drawing
+- "xPct": estimated X position of this callout as a percentage of total image width (0-100)
+- "yPct": estimated Y position of this callout as a percentage of total image height (0-100)
+
+Return ONLY valid JSON array, no other text. Example:
+[{"label":"Bore diameter","type":"diameter","nom":25.4,"upperTol":0.05,"lowerTol":-0.05,"raw":"Ø25.4 ±0.05","xPct":42,"yPct":31}]`}
+        ]}]
+      })
+    });
+    const data=await resp.json();
+    if(data.error){throw new Error(data.error.message);}
+    const text=data.content[0].text.trim();
+    const cleaned=text.replace(/^```json
+?/,'').replace(/
+?```$/,'').trim();
+    const items=JSON.parse(cleaned);
+    ocrDims=items.map((item,i)=>({
+      id:i+1,
+      raw:item.raw||item.label||'',
+      type:item.type||'length',
+      nom:item.nom||0,
+      tol:item.upperTol||null,
+      prefix:'',
+      assigned:false,
+      cx:item.xPct!=null?(item.xPct/100)*cw/scale:null,
+      cy:item.yPct!=null?(item.yPct/100)*ch/scale:null,
+      label:item.label||'',
+      upperTol:item.upperTol,
+      lowerTol:item.lowerTol
+    }));
+    st.className='ocr-st ok';st.textContent=`✓ AI found ${ocrDims.length} dimension(s) — click Auto-Place Balloons`;
+    renderOCRDims();toast('AI scan complete: '+ocrDims.length+' items found','ok');
+  }catch(err){
+    st.className='ocr-st err';st.textContent='✗ AI scan failed: '+err.message;
+    toast('AI scan failed: '+err.message,'err');
+  }
+}
+
+// Keep basic OCR as fallback
 async function runOCR(){
   if(!drawingLoaded){toast('Load a drawing first','err');return;}
-  const st=document.getElementById('ocrSt');st.className='ocr-st run';st.textContent='⏳ Running OCR…';swTab('ocr');
+  const st=document.getElementById('ocrSt');st.className='ocr-st run';st.textContent='⏳ Running OCR…';
   try{
     const canvas=document.getElementById('drawingCanvas');
     const result=await Tesseract.recognize(canvas.toDataURL('image/png'),'eng',{logger:m=>{if(m.status==='recognizing text')st.textContent=`⏳ OCR: ${Math.round(m.progress*100)}%`;}});
+    const wordBoxes=[];
+    (result.data.words||[]).forEach(w=>{
+      if(w.bbox)wordBoxes.push({text:w.text,x:(w.bbox.x0+w.bbox.x1)/2/scale,y:(w.bbox.y0+w.bbox.y1)/2/scale});
+    });
     ocrDims=parseDims(result.data.text);
-    st.className='ocr-st ok';st.textContent=`✓ OCR done — ${ocrDims.length} dimension(s) found`;
+    ocrDims.forEach(d=>{
+      const numStr=String(d.nom);
+      const match=wordBoxes.find(w=>w.text.replace(/[^0-9.]/g,'').includes(numStr.replace(/[^0-9.]/g,'').slice(0,4)));
+      d.cx=match?match.x:null; d.cy=match?match.y:null;
+    });
+    st.className='ocr-st ok';st.textContent=`✓ Basic OCR done — ${ocrDims.length} found. For better results use AI Scan above.`;
     renderOCRDims();toast('OCR: '+ocrDims.length+' dimensions found','ok');
   }catch(err){st.className='ocr-st err';st.textContent='✗ OCR failed: '+err.message;toast('OCR failed','err');}
+}
+
+function autoPlaceBalloons(){
+  if(!ocrDims.length){toast('Run AI Scan or OCR first','err');return;}
+  const placeable=ocrDims.filter(d=>!d.assigned&&d.cx!=null);
+  if(!placeable.length){toast('No positionable dims found — try AI Scan for better results','info');return;}
+  saveHistory();
+  placeable.forEach(d=>{
+    const idx=pdiRows.length;
+    const uTol=d.upperTol!=null?d.upperTol:(d.tol||null);
+    const lTol=d.lowerTol!=null?d.lowerTol:(d.tol?-d.tol:null);
+    addPPAPRow(d.label||d.raw,d.type,d.nom,uTol,lTol,'CMM','100%','TBD');
+    balloons.push({id:Date.now()+Math.random(),x:d.cx+45,y:d.cy-45,tx:d.cx,ty:d.cy,num:idx+1,pdiRow:idx,color:bColor,numSize:bSize,label:'',labelSize:bSize,labelColor:bColor,labelBold:false,labelItalic:false,labelUnderline:false});
+    d.assigned=true;
+  });
+  renderBalloons();renderOCRDims();redraw();swTab('balloons');
+  toast('Auto-placed '+placeable.length+' balloons','ok');
 }
 function parseDims(text){
   const dims=[],seen=new Set();

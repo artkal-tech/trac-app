@@ -121,11 +121,39 @@
       </div>
       <!-- OCR -->
       <div class="psec" id="sec-ocr">
-        <div style="font-size:12px;font-weight:600;margin-bottom:4px">OCR Dimension Extractor</div>
-        <div style="font-size:10px;color:var(--tdim);margin-bottom:8px;line-height:1.65">Runs Tesseract OCR on the drawing canvas and auto-detects dimensions, tolerances, GD&amp;T callouts, thread specs. Click any result to add to the PPAP table.</div>
-        <button class="abtn b" id="ocrBtn" onclick="runOCR()" style="width:100%;justify-content:center;margin-bottom:8px" disabled><svg width="12" height="12" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><rect x="1" y="1" width="14" height="14" rx="1"/><path d="M4 6h8M4 10h5"/></svg>Run OCR on Drawing</button>
+        <div style="font-size:12px;font-weight:600;margin-bottom:6px">AI Drawing Scanner</div>
+
+        <!-- AI SCAN -->
+        <div style="background:rgba(200,240,80,.04);border:1px solid rgba(200,240,80,.14);border-radius:8px;padding:10px;margin-bottom:10px">
+          <div style="font-size:10px;font-weight:700;letter-spacing:.08em;text-transform:uppercase;color:var(--accent);margin-bottom:6px">⚡ AI Scan — Recommended</div>
+          <div style="font-size:10px;color:var(--tdim);margin-bottom:7px;line-height:1.6">Uses Claude AI vision to intelligently read the drawing — understands dimension lines, tolerance blocks, GD&amp;T symbols and notes.</div>
+          <label class="f-label">Claude API Key</label>
+          <input class="f-inp" id="aiApiKey" type="password" placeholder="sk-ant-api03-..." style="margin-bottom:7px;font-family:var(--fm);font-size:11px">
+          <div style="font-size:9px;color:var(--tdim);margin-bottom:8px">Get a free key at <a href="https://console.anthropic.com" target="_blank" style="color:var(--accent)">console.anthropic.com</a> → API Keys</div>
+          <button class="abtn g" id="aiScanBtn" onclick="runAIScan()" style="width:100%;justify-content:center" disabled>
+            <svg width="12" height="12" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M8 1l2 4h4l-3 3 1 4-4-2-4 2 1-4L2 5h4z"/></svg>
+            Scan with AI
+          </button>
+        </div>
+
+        <!-- BASIC OCR fallback -->
+        <details style="margin-bottom:8px">
+          <summary style="font-size:10px;color:var(--tdim);cursor:pointer;padding:4px 0">▸ Basic OCR (no API key needed — less accurate)</summary>
+          <div style="padding-top:8px">
+            <button class="abtn b" id="ocrBtn" onclick="runOCR()" style="width:100%;justify-content:center" disabled>
+              <svg width="12" height="12" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><rect x="1" y="1" width="14" height="14" rx="1"/><path d="M4 6h8M4 10h5"/></svg>
+              Run Basic OCR
+            </button>
+          </div>
+        </details>
+
+        <button class="abtn g" id="autoBtn" onclick="autoPlaceBalloons()" style="width:100%;justify-content:center;margin-bottom:8px" disabled>
+          <svg width="12" height="12" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><circle cx="7" cy="6" r="4"/><path d="M11 10l3 4"/></svg>
+          Auto-Place All Balloons
+        </button>
+
         <div class="ocr-st" id="ocrSt"></div>
-        <div class="dim-list" id="dimList"><div class="empty-st"><div class="ei">🔍</div>Load a drawing and run OCR.</div></div>
+        <div class="dim-list" id="dimList"><div class="empty-st"><div class="ei">⚡</div>Load a drawing then click <b>Scan with AI</b>.</div></div>
       </div>
       <!-- POINTS -->
       <div class="psec" id="sec-points">
